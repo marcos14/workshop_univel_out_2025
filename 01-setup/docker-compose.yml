@@ -1,0 +1,96 @@
+# ============================================
+# DOCKER COMPOSE - WORKSHOP LANGCHAIN + MCP + QDRANT
+# ============================================
+# Serviços auxiliares para desenvolvimento local
+# Execute: docker compose up -d
+
+version: '3.8'
+
+services:
+  # ==========================================
+  # QDRANT - Vector Database
+  # ==========================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: workshop-qdrant
+    ports:
+      - "6333:6333"     # API REST
+      - "6334:6334"     # gRPC (opcional)
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      # Configurações básicas para desenvolvimento
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      # Desabilita autenticação para desenvolvimento local
+      QDRANT__SERVICE__ENABLE_CORS: true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - workshop-network
+
+  # ==========================================
+  # REDIS - Cache e Sessões
+  # ==========================================
+  # Comente este serviço se não quiser usar Redis
+  redis:
+    image: redis:7-alpine
+    container_name: workshop-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    environment:
+      # Configurações de desenvolvimento
+      REDIS_PASSWORD: ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - workshop-network
+
+# ==========================================
+# VOLUMES PERSISTENTES
+# ==========================================
+volumes:
+  # Dados do Qdrant (coleções, índices, embeddings)
+  qdrant_storage:
+    driver: local
+    name: workshop-qdrant-storage
+  
+  # Dados do Redis (cache, sessões)
+  redis_data:
+    driver: local
+    name: workshop-redis-data
+
+# ==========================================
+# REDE INTERNA
+# ==========================================
+networks:
+  workshop-network:
+    driver: bridge
+    name: workshop-network
+
+# ==========================================
+# COMANDOS ÚTEIS
+# ==========================================
+# Iniciar serviços:     docker compose up -d
+# Ver logs:             docker compose logs -f
+# Parar serviços:       docker compose down
+# Resetar dados:        docker compose down -v
+# Status dos serviços:  docker compose ps
+#
+# URLs de acesso:
+# - Qdrant Dashboard:   http://localhost:6333/dashboard
+# - Qdrant API:         http://localhost:6333
+# - Redis CLI:          docker compose exec redis redis-cli
