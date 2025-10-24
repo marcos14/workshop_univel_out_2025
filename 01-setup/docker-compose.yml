@@ -1,12 +1,37 @@
 # ============================================
 # DOCKER COMPOSE - WORKSHOP LANGCHAIN + MCP + QDRANT
 # ============================================
-# Serviços auxiliares para desenvolvimento local
+# Ambiente completo containerizado para o workshop
 # Execute: docker compose up -d
 
-version: '3.8'
-
 services:
+  # ==========================================
+  # PYTHON APP - Ambiente de desenvolvimento
+  # ==========================================
+  workshop-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: workshop-app
+    volumes:
+      - .:/app
+      - workshop_cache:/home/workshop/.cache
+    environment:
+      # Carrega variáveis do arquivo .env
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+    depends_on:
+      - qdrant
+      - redis
+    networks:
+      - workshop-network
+    # Mantém container rodando para desenvolvimento
+    command: ["sleep", "infinity"]
+    tty: true
+    stdin_open: true
   # ==========================================
   # QDRANT - Vector Database
   # ==========================================
@@ -24,12 +49,12 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
       # Desabilita autenticação para desenvolvimento local
       QDRANT__SERVICE__ENABLE_CORS: true
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # healthcheck:
+    #   test: ["CMD-SHELL", "curl -f http://localhost:6333/health || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+    #   start_period: 15s
     restart: unless-stopped
     networks:
       - workshop-network
@@ -72,6 +97,11 @@ volumes:
   redis_data:
     driver: local
     name: workshop-redis-data
+  
+  # Cache Python (pip, poetry, etc.)
+  workshop_cache:
+    driver: local
+    name: workshop-python-cache
 
 # ==========================================
 # REDE INTERNA
@@ -84,13 +114,18 @@ networks:
 # ==========================================
 # COMANDOS ÚTEIS
 # ==========================================
-# Iniciar serviços:     docker compose up -d
-# Ver logs:             docker compose logs -f
-# Parar serviços:       docker compose down
-# Resetar dados:        docker compose down -v
-# Status dos serviços:  docker compose ps
+# Iniciar ambiente:      docker compose up -d
+# Ver logs:              docker compose logs -f
+# Parar serviços:        docker compose down
+# Resetar dados:         docker compose down -v
+# Status dos serviços:   docker compose ps
+# Executar comandos:     docker compose exec workshop-app python script.py
+# Shell no container:    docker compose exec workshop-app bash
 #
 # URLs de acesso:
-# - Qdrant Dashboard:   http://localhost:6333/dashboard
-# - Qdrant API:         http://localhost:6333
-# - Redis CLI:          docker compose exec redis redis-cli
+# - Qdrant Dashboard:    http://localhost:6333/dashboard
+# - Qdrant API:          http://localhost:6333
+# - Redis CLI:           docker compose exec redis redis-cli
+#
+# Verificação do ambiente:
+# docker compose exec workshop-app python -m scripts.check_env

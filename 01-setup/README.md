@@ -1,6 +1,6 @@
 # 01-setup — Fundamentos e Primeiros Testes
 
-Bem-vindo ao **Workshop LangChain + MCP + Qdrant**! Este é o primeiro módulo, onde você vai configurar todo o ambiente de desenvolvimento e executar os primeiros testes para garantir que tudo está funcionando perfeitamente.
+Bem-vindo ao **Workshop LangChain + MCP + Qdrant**! Este é o primeiro módulo, onde você vai configurar todo o ambiente de desenvolvimento **totalmente containerizado** e executar os primeiros testes para garantir que tudo está funcionando perfeitamente.
 
 ## 🎯 Contexto e Objetivos
 
@@ -10,40 +10,42 @@ Neste workshop, você vai aprender a construir aplicações inteligentes combina
 - **MCP (Model Context Protocol)**: Protocolo emergente para padronizar comunicação entre LLMs e sistemas externos, permitindo integração transparente de dados e ferramentas
 - **Qdrant**: Banco de dados vetorial de alta performance, especializado em busca por similaridade e operações com embeddings
 
-Este módulo (01-setup) foca exclusivamente em **preparar o ambiente** e **validar a conectividade** com todos os serviços. Você vai instalar dependências, configurar credenciais, subir serviços auxiliares via Docker e executar verificações automáticas de sanidade.
+Este módulo (01-setup) foca exclusivamente em **preparar o ambiente containerizado** e **validar a conectividade** com todos os serviços. Você vai usar Docker para executar todo o ambiente, incluindo Python, dependências, Qdrant e Redis.
 
-**Por que essa stack?** A combinação LangChain + Qdrant permite construir sistemas RAG (Retrieval-Augmented Generation) robustos, enquanto o MCP adiciona uma camada de integração padronizada com sistemas corporativos. É a stack perfeita para aplicações empresariais que precisam de memória semântica e integração com dados externos.
+**Por que Docker?** Elimina problemas de instalação de Python, Poetry e dependências. Todo participante terá exatamente o mesmo ambiente, independente do sistema operacional. É a stack perfeita para workshops técnicos onde o foco deve ser no aprendizado, não na configuração.
 
 ## 📋 Requisitos
 
-Antes de começar, certifique-se de ter instalado:
+Antes de começar, certifique-se de ter instalado **APENAS**:
 
-- **Python 3.10+** (verifique com `python --version`)
-- **Docker + Docker Compose** (para Qdrant e Redis)
-- **Poetry** (gerenciador de dependências Python - será instalado automaticamente se necessário)
-- **Git** (para clonar repositórios)
-- **Conexão com internet** (para download de dependências e APIs)
+- **Docker Desktop** (Windows/Mac) ou **Docker Engine** (Linux)
+- **Docker Compose** (geralmente incluído no Docker Desktop)
+- **Conexão com internet** (para download de imagens e APIs)
+
+### ⚠️ Não é necessário instalar:
+- ❌ Python (será executado no container)
+- ❌ Poetry (será executado no container)  
+- ❌ Dependências Python (todas no container)
+- ❌ Qdrant local (roda no container)
+- ❌ Redis local (roda no container)
 
 ### Ferramentas Opcionais (Recomendadas)
-- **VS Code** com extensões Python e Docker
+- **VS Code** com extensão Docker
 - **Postman/Insomnia** para testar APIs REST
-- **Redis CLI** para debug do cache
 
 ## 🚀 Passo a Passo
 
-### 1. Configuração Inicial Automática
+### 1. Verificação e Configuração Inicial
 
-Execute o comando de bootstrap que irá instalar todas as dependências e configurar o ambiente:
+Execute o comando de bootstrap que irá verificar o Docker e configurar o ambiente:
 
 ```bash
 make bootstrap
 ```
 
 Este comando vai:
-- ✅ Verificar se Python 3.10+ está instalado
-- ✅ Instalar Poetry (se necessário)
-- ✅ Criar ambiente virtual Python
-- ✅ Instalar todas as dependências do projeto
+- ✅ Verificar se Docker e Docker Compose estão instalados e rodando
+- ✅ Testar conectividade com Docker Hub
 - ✅ Criar arquivo `.env` a partir do template
 - ✅ Exibir próximos passos
 
@@ -62,22 +64,23 @@ nano .env
 **Configurações obrigatórias:**
 - `OPENAI_API_KEY`: Sua chave da OpenAI (obtenha em https://platform.openai.com/api-keys)
 
-**Configurações que funcionam por padrão:**
-- `QDRANT_URL=http://localhost:6333` (para Docker local)
-- `REDIS_URL=redis://localhost:6379/0` (para Docker local)
+**Configurações automáticas (já configuradas):**
+- `QDRANT_URL=http://qdrant:6333` (URL interna do Docker)
+- `REDIS_URL=redis://redis:6379/0` (URL interna do Docker)
 
-### 3. Iniciar Serviços Auxiliares
+### 3. Iniciar Ambiente Completo
 
-Suba o Qdrant e Redis usando Docker Compose:
+Inicie todo o ambiente containerizado (Python + Qdrant + Redis):
 
 ```bash
 make up
 ```
 
 Este comando vai:
+- 🔨 Construir imagem Python com todas as dependências
 - 🐳 Baixar e iniciar container do Qdrant na porta 6333
 - 🐳 Baixar e iniciar container do Redis na porta 6379
-- ⏳ Aguardar serviços ficarem prontos (health checks)
+- ⏳ Aguardar todos os serviços ficarem prontos (health checks)
 - 🌐 Exibir URLs de acesso
 
 **URLs dos serviços:**
@@ -93,7 +96,7 @@ Execute o script de verificação completa do ambiente:
 make check
 ```
 
-Este comando vai verificar:
+Este comando vai verificar **dentro dos containers**:
 - ✅ **Python**: Versão >= 3.10
 - ✅ **Configuração**: Arquivo .env e variáveis obrigatórias
 - ✅ **Qdrant**: Conectividade e listagem de coleções
@@ -104,35 +107,57 @@ Este comando vai verificar:
 
 ```bash
 # Configuração inicial
-make bootstrap          # Instala dependências e configura ambiente
-make install            # Instala apenas dependências Python
+make bootstrap          # Verifica Docker e configura ambiente
+make build              # Constrói imagens Docker
 
-# Gerenciamento de serviços
-make up                 # Inicia Qdrant e Redis
-make down               # Para os serviços
+# Gerenciamento do ambiente
+make up                 # Inicia ambiente completo (app + qdrant + redis)
+make down               # Para todos os serviços
+make logs               # Mostra logs de todos os serviços
 make status             # Mostra status dos containers
-make logs               # Mostra logs dos serviços
 
-# Verificações e qualidade
+# Desenvolvimento
+make shell              # Abre shell no container Python
 make check              # Executa verificações de sanidade
 make lint               # Verifica formatação do código
-make test               # Executa testes (quando disponíveis)
+make test               # Executa testes
 
 # Utilitários
-make clean              # Remove arquivos temporários
+make clean              # Remove containers e volumes
+make rebuild            # Reconstrói tudo do zero
 make info               # Mostra informações do ambiente
 make help               # Lista todos os comandos
+```
+
+## 🐚 Desenvolvimento Interativo
+
+Para trabalhar com Python interativamente, use:
+
+```bash
+# Abre shell bash no container Python
+make shell
+
+# Dentro do container, você pode:
+python -m scripts.check_env
+python -c "from app.config import get_settings; print(get_settings())"
+python -c "from app.llm_sanity import hello; print(hello())"
+
+# Instalar pacotes adicionais (temporariamente)
+pip install nome-do-pacote
 ```
 
 ## 🚨 Troubleshooting
 
 ### Problemas Comuns
 
-**"Poetry não encontrado"**
+**"Docker não encontrado" ou "Docker não está rodando"**
 ```bash
-# Instale manualmente:
-curl -sSL https://install.python-poetry.org | python3 -
-# Adicione ao PATH e reinicie o terminal
+# Verifique se Docker Desktop está instalado e iniciado
+docker --version
+docker info
+
+# Windows/Mac: Abra Docker Desktop
+# Linux: sudo systemctl start docker
 ```
 
 **"Porta 6333 já está em uso"**
@@ -141,19 +166,21 @@ curl -sSL https://install.python-poetry.org | python3 -
 lsof -i :6333          # Linux/macOS
 netstat -ano | findstr :6333    # Windows
 
-# Pare container existente:
+# Pare containers existentes:
+docker compose down
 docker stop $(docker ps -q --filter "publish=6333")
 ```
 
-**"Erro de conexão com Qdrant"**
+**"Erro de conectividade com Qdrant"**
 ```bash
-# Verifique se o container está rodando:
+# Verifique se todos os containers estão rodando:
 docker compose ps
 
-# Veja logs do Qdrant:
+# Veja logs específicos:
 docker compose logs qdrant
+docker compose logs workshop-app
 
-# Reinicie serviços:
+# Reinicie ambiente:
 make down && make up
 ```
 
@@ -162,14 +189,24 @@ make down && make up
 - Confirme que a chave tem créditos disponíveis
 - Teste a chave diretamente: https://platform.openai.com/playground
 
-**"Erro de proxy corporativo"**
+**"Erro de build da imagem Docker"**
 ```bash
-# Configure proxy para Docker:
+# Limpe cache e reconstrua:
+make clean
+make rebuild
+
+# Ou force rebuild:
+docker compose build --no-cache
+```
+
+**"Proxy corporativo"**
+```bash
+# Configure proxy para Docker Desktop:
+# Settings > Resources > Proxies
+
+# Para Docker CLI:
 export HTTP_PROXY=http://proxy.empresa.com:8080
 export HTTPS_PROXY=http://proxy.empresa.com:8080
-
-# Configure proxy para Poetry:
-poetry config http-basic.pypi username password
 ```
 
 ### Verificação Manual
@@ -177,34 +214,50 @@ poetry config http-basic.pypi username password
 Se o `make check` falhar, você pode testar componentes individualmente:
 
 ```bash
-# Teste Python e configuração
-poetry run python -c "from app.config import get_settings; print(get_settings())"
+# Acesse o shell do container
+make shell
 
-# Teste Qdrant
-poetry run python -c "from app.qdrant_sanity import check_connection; print(check_connection())"
+# Dentro do container, teste cada componente:
+python -c "from app.config import get_settings; print(get_settings())"
+python -c "from app.qdrant_sanity import check_connection; print(check_connection())"
+python -c "from app.redis_sanity import roundtrip; print(roundtrip())"
+python -c "from app.llm_sanity import hello; print(hello())"
+```
 
-# Teste Redis  
-poetry run python -c "from app.redis_sanity import roundtrip; print(roundtrip())"
+### Debug Avançado
 
-# Teste LLM
-poetry run python -c "from app.llm_sanity import hello; print(hello())"
+```bash
+# Logs detalhados de um serviço específico
+docker compose logs -f qdrant
+docker compose logs -f redis
+docker compose logs -f workshop-app
+
+# Status detalhado dos containers
+docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"
+
+# Informações de rede
+docker network ls
+docker network inspect workshop-network
+
+# Espaço em disco
+docker system df
 ```
 
 ## ✅ Checklist de Sucesso
 
 Você está pronto para o próximo módulo quando:
 
-- [ ] `make bootstrap` executou sem erros
+- [ ] `make bootstrap` executou sem erros (Docker verificado)
 - [ ] Arquivo `.env` configurado com `OPENAI_API_KEY`
-- [ ] `make up` iniciou Qdrant e Redis com sucesso
+- [ ] `make up` iniciou todos os containers com sucesso
 - [ ] `make check` reporta todas as verificações críticas como ✅
 - [ ] Qdrant Dashboard acessível em http://localhost:6333/dashboard
-- [ ] Todos os imports Python funcionando (`poetry run python -c "import app"`)
+- [ ] Shell do container funciona (`make shell`)
 
 ### Verificações Obrigatórias ✅
-- **Python >= 3.10**: Versão mínima para compatibilidade
-- **Configuração válida**: Arquivo .env presente e variáveis carregadas
-- **Qdrant conectado**: Banco vetorial acessível e operacional
+- **Docker funcionando**: Docker Desktop rodando e responsivo
+- **Containers ativos**: `docker compose ps` mostra todos os serviços UP
+- **Qdrant operacional**: Dashboard acessível e API respondendo
 
 ### Verificações Recomendadas ⭐
 - **OpenAI configurado**: Para testes de LLM (pode ser configurado depois)
@@ -216,11 +269,12 @@ Você está pronto para o próximo módulo quando:
 01-setup/
 ├── README.md              # Este arquivo
 ├── SLIDES.md              # Base para apresentação
+├── Dockerfile             # Imagem Python com dependências
+├── docker-compose.yml     # Orquestração de serviços
 ├── pyproject.toml         # Configuração Poetry e dependências
 ├── .env.example           # Template de variáveis de ambiente
 ├── .gitignore             # Arquivos ignorados pelo Git
 ├── Makefile               # Comandos de automação
-├── docker-compose.yml     # Serviços Qdrant + Redis
 ├── scripts/
 │   ├── bootstrap.sh       # Script de configuração inicial
 │   └── check_env.py       # Verificações de sanidade
@@ -251,8 +305,15 @@ Após completar este setup com sucesso, você estará pronto para:
 
 ---
 
-**🎉 Parabéns!** Você configurou com sucesso o ambiente para o workshop. Agora é hora de partir para a criação de embeddings e implementação de busca semântica!
+**🎉 Parabéns!** Você configurou com sucesso o ambiente **containerizado** para o workshop. Agora é hora de partir para a criação de embeddings e implementação de busca semântica!
+
+**🐳 Vantagens da Abordagem Docker:**
+- ✅ Ambiente idêntico para todos os participantes
+- ✅ Sem problemas de instalação de Python/Poetry
+- ✅ Isolamento completo de dependências
+- ✅ Setup rápido e confiável
+- ✅ Fácil reset e limpeza
 
 ---
 
-*Workshop LangChain + MCP + Qdrant | Universidade Univel | Módulo 01 - Setup e Fundamentos*
+*Workshop LangChain + MCP + Qdrant | Universidade Univel | Módulo 01 - Setup e Fundamentos | Versão Docker*

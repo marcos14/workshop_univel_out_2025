@@ -37,8 +37,8 @@ class Settings(BaseModel):
     # QDRANT (Vector Database)
     # ==========================================
     QDRANT_URL: str = Field(
-        default="http://localhost:6333",
-        description="URL do servidor Qdrant"
+        default="http://qdrant:6333",
+        description="URL do servidor Qdrant (interno Docker: qdrant:6333, externo: localhost:6333)"
     )
     
     QDRANT_API_KEY: Optional[str] = Field(
@@ -50,8 +50,8 @@ class Settings(BaseModel):
     # REDIS (Cache e Sessões)
     # ==========================================
     REDIS_URL: Optional[str] = Field(
-        default="redis://localhost:6379/0",
-        description="URL de conexão com Redis"
+        default="redis://redis:6379/0",
+        description="URL de conexão com Redis (interno Docker: redis:6379, externo: localhost:6379)"
     )
     
     # ==========================================

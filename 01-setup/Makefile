@@ -1,9 +1,9 @@
 # ============================================
 # MAKEFILE - WORKSHOP LANGCHAIN + MCP + QDRANT
 # ============================================
-# Comandos para automação do ambiente de desenvolvimento
+# Comandos para automação do ambiente containerizado
 
-.PHONY: help bootstrap up down check lint test clean install status logs
+.PHONY: help bootstrap up down check lint test clean build logs shell
 
 # Target padrão - mostra ajuda
 help:
@@ -12,22 +12,24 @@ help:
 	@echo "==================================================="
 	@echo ""
 	@echo "Configuração inicial:"
-	@echo "  bootstrap    - Instala dependências e configura ambiente"
-	@echo "  install      - Instala apenas as dependências Python"
+	@echo "  bootstrap    - Verifica Docker e configura ambiente"
+	@echo "  build        - Constrói imagens Docker"
 	@echo ""
-	@echo "Docker (serviços auxiliares):"
-	@echo "  up           - Inicia Qdrant e Redis"
-	@echo "  down         - Para os serviços"
+	@echo "Ambiente (todos os serviços):"
+	@echo "  up           - Inicia todo o ambiente (app + qdrant + redis)"
+	@echo "  down         - Para todos os serviços"
+	@echo "  logs         - Mostra logs de todos os serviços"
 	@echo "  status       - Mostra status dos containers"
-	@echo "  logs         - Mostra logs dos serviços"
 	@echo ""
-	@echo "Verificações e testes:"
+	@echo "Desenvolvimento:"
+	@echo "  shell        - Abre shell no container Python"
 	@echo "  check        - Executa verificações de sanidade"
 	@echo "  lint         - Verifica formatação do código"
-	@echo "  test         - Executa testes (quando disponíveis)"
+	@echo "  test         - Executa testes"
 	@echo ""
 	@echo "Utilitários:"
-	@echo "  clean        - Remove arquivos temporários"
+	@echo "  clean        - Remove containers e volumes"
+	@echo "  rebuild      - Reconstrói tudo do zero"
 	@echo ""
 
 # ==========================================
@@ -35,66 +37,73 @@ help:
 # ==========================================
 
 bootstrap:
-	@echo "🚀 Iniciando configuração do ambiente..."
-	@echo "📋 Executando script de bootstrap..."
+	@echo "🚀 Verificando ambiente Docker..."
 	@bash scripts/bootstrap.sh
 	@echo "✅ Bootstrap concluído!"
 	@echo ""
 	@echo "Próximos passos:"
 	@echo "1. Configure suas chaves no arquivo .env"
-	@echo "2. Execute: make up (para iniciar serviços)"
+	@echo "2. Execute: make up (para iniciar ambiente)"
 	@echo "3. Execute: make check (para verificar tudo)"
 
-install:
-	@echo "📦 Instalando dependências Python..."
-	@poetry install
-	@echo "✅ Dependências instaladas!"
+build:
+	@echo "� Construindo imagens Docker..."
+	@docker compose build --no-cache
+	@echo "✅ Imagens construídas!"
+
+rebuild: clean build up
+	@echo "🔄 Ambiente reconstruído completamente!"
 
 # ==========================================
-# DOCKER SERVICES
+# GERENCIAMENTO DO AMBIENTE
 # ==========================================
 
 up:
-	@echo "🐳 Iniciando serviços (Qdrant + Redis)..."
+	@echo "🐳 Iniciando ambiente completo..."
 	@docker compose up -d
 	@echo "⏳ Aguardando serviços ficarem prontos..."
-	@sleep 10
-	@echo "🌐 Serviços disponíveis:"
+	@sleep 15
+	@echo "🌐 Ambiente disponível:"
 	@echo "   - Qdrant Dashboard: http://localhost:6333/dashboard"
 	@echo "   - Qdrant API: http://localhost:6333"
 	@echo "   - Redis: localhost:6379"
-	@echo "✅ Serviços iniciados!"
+	@echo "   - Shell Python: make shell"
+	@echo "✅ Ambiente iniciado!"
 
 down:
-	@echo "🛑 Parando serviços..."
+	@echo "🛑 Parando ambiente..."
 	@docker compose down
-	@echo "✅ Serviços parados!"
-
-status:
-	@echo "📊 Status dos serviços:"
-	@docker compose ps
+	@echo "✅ Ambiente parado!"
 
 logs:
-	@echo "📋 Logs dos serviços (Ctrl+C para sair):"
+	@echo "� Logs do ambiente (Ctrl+C para sair):"
 	@docker compose logs -f
 
+status:
+	@echo "� Status dos serviços:"
+	@docker compose ps
+
 # ==========================================
-# VERIFICAÇÕES E TESTES
+# DESENVOLVIMENTO
 # ==========================================
+
+shell:
+	@echo "🐚 Abrindo shell no container Python..."
+	@docker compose exec workshop-app bash
 
 check:
 	@echo "🔍 Executando verificações de sanidade..."
-	@poetry run python -m scripts.check_env
+	@docker compose exec workshop-app python -m scripts.check_env
 	@echo ""
 
 lint:
 	@echo "🧹 Verificando formatação do código..."
-	@poetry run ruff check .
-	@echo "✅ Código formatado corretamente!"
+	@docker compose exec workshop-app ruff check .
+	@echo "✅ Código verificado!"
 
 test:
 	@echo "🧪 Executando testes..."
-	@poetry run pytest -q
+	@docker compose exec workshop-app pytest -q
 	@echo "✅ Testes concluídos!"
 
 # ==========================================
@@ -102,23 +111,22 @@ test:
 # ==========================================
 
 clean:
-	@echo "🧹 Limpando arquivos temporários..."
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+	@echo "🧹 Removendo containers e volumes..."
+	@docker compose down -v --remove-orphans
+	@docker system prune -f
 	@echo "✅ Limpeza concluída!"
 
 # ==========================================
-# COMANDOS AVANÇADOS
+# COMANDOS ESPECÍFICOS
 # ==========================================
 
-# Reset completo do ambiente
-reset: down clean
-	@echo "🔄 Resetando ambiente completo..."
-	@docker compose down -v
-	@rm -f .env
-	@echo "✅ Reset concluído! Execute 'make bootstrap' para reconfigurar."
+# Executa comando Python no container
+python-exec:
+	@docker compose exec workshop-app python $(CMD)
+
+# Instala pacote Python no container
+install-package:
+	@docker compose exec workshop-app pip install $(PACKAGE)
 
 # Backup dos dados
 backup:
@@ -130,7 +138,15 @@ backup:
 # Informações do ambiente
 info:
 	@echo "ℹ️  Informações do ambiente:"
-	@echo "Python: $(shell python --version 2>&1 || echo 'Não encontrado')"
-	@echo "Poetry: $(shell poetry --version 2>&1 || echo 'Não encontrado')"
 	@echo "Docker: $(shell docker --version 2>&1 || echo 'Não encontrado')"
 	@echo "Docker Compose: $(shell docker compose version 2>&1 || echo 'Não encontrado')"
+	@echo ""
+	@echo "Containers ativos:"
+	@docker compose ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null || echo "Nenhum container ativo"
+
+# Reset completo do ambiente
+reset: clean
+	@echo "🔄 Resetando ambiente completo..."
+	@docker volume prune -f
+	@rm -f .env
+	@echo "✅ Reset concluído! Execute 'make bootstrap' para reconfigurar."

@@ -3,7 +3,7 @@
 # ============================================
 # BOOTSTRAP SCRIPT - WORKSHOP LANGCHAIN + MCP + QDRANT
 # ============================================
-# Script de configuração inicial do ambiente de desenvolvimento
+# Script de configuração inicial do ambiente DOCKERIZADO
 # Execução: bash scripts/bootstrap.sh ou make bootstrap
 
 set -e  # Para execução em caso de erro
@@ -43,106 +43,68 @@ print_info() {
 # VERIFICAÇÕES INICIAIS
 # ==========================================
 
-print_header "WORKSHOP LANGCHAIN + MCP + QDRANT - BOOTSTRAP"
+print_header "WORKSHOP LANGCHAIN + MCP + QDRANT - BOOTSTRAP DOCKER"
 
 print_info "Verificando requisitos do sistema..."
 
 # Verifica se estamos no diretório correto
-if [ ! -f "pyproject.toml" ]; then
-    print_error "Arquivo pyproject.toml não encontrado!"
+if [ ! -f "docker-compose.yml" ]; then
+    print_error "Arquivo docker-compose.yml não encontrado!"
     print_error "Execute este script a partir da pasta raiz do projeto (01-setup)"
     exit 1
 fi
 
-# Verifica Python
-if ! command -v python &> /dev/null && ! command -v python3 &> /dev/null; then
-    print_error "Python não encontrado!"
-    print_error "Instale Python 3.10+ antes de continuar."
+# ==========================================
+# VERIFICAÇÃO DO DOCKER
+# ==========================================
+
+print_info "Verificando Docker..."
+
+# Verifica Docker
+if ! command -v docker &> /dev/null; then
+    print_error "Docker não encontrado!"
+    print_error "Instale Docker Desktop antes de continuar:"
+    print_info "  Windows/Mac: https://www.docker.com/products/docker-desktop"
+    print_info "  Linux: https://docs.docker.com/engine/install/"
     exit 1
 fi
 
-# Determina comando Python correto
-PYTHON_CMD="python"
-if command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
-fi
-
-# Verifica versão do Python
-PYTHON_VERSION=$($PYTHON_CMD --version 2>&1 | cut -d' ' -f2)
-PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d'.' -f1)
-PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d'.' -f2)
-
-if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]); then
-    print_error "Python $PYTHON_VERSION detectado. É necessário Python 3.10 ou superior."
-    print_info "Versão atual: $PYTHON_VERSION"
-    print_info "Mínima requerida: 3.10.0"
+# Verifica se Docker está rodando
+if ! docker info &> /dev/null; then
+    print_error "Docker não está rodando!"
+    print_error "Inicie Docker Desktop ou o daemon do Docker:"
+    print_info "  Windows/Mac: Abra Docker Desktop"
+    print_info "  Linux: sudo systemctl start docker"
     exit 1
 fi
 
-print_success "Python $PYTHON_VERSION detectado ✓"
+DOCKER_VERSION=$(docker --version | cut -d' ' -f3 | cut -d',' -f1)
+print_success "Docker $DOCKER_VERSION detectado e rodando ✓"
 
 # ==========================================
-# VERIFICAÇÃO E INSTALAÇÃO DO POETRY
+# VERIFICAÇÃO DO DOCKER COMPOSE
 # ==========================================
 
-print_info "Verificando Poetry..."
+print_info "Verificando Docker Compose..."
 
-if ! command -v poetry &> /dev/null; then
-    print_warning "Poetry não encontrado. Instalando..."
-    
-    # Instala Poetry
-    if command -v curl &> /dev/null; then
-        curl -sSL https://install.python-poetry.org | $PYTHON_CMD -
-    else
-        print_error "curl não encontrado. Instale Poetry manualmente:"
-        print_info "https://python-poetry.org/docs/#installation"
-        exit 1
-    fi
-    
-    # Adiciona Poetry ao PATH (temporariamente)
-    export PATH="$HOME/.local/bin:$PATH"
-    
-    if ! command -v poetry &> /dev/null; then
-        print_error "Falha na instalação do Poetry."
-        print_info "Instale manualmente: https://python-poetry.org/docs/#installation"
-        print_info "Em seguida, adicione ao PATH e execute este script novamente."
-        exit 1
-    fi
-    
-    print_success "Poetry instalado com sucesso!"
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    print_error "Docker Compose não encontrado!"
+    print_error "Instale Docker Compose:"
+    print_info "  Geralmente vem com Docker Desktop"
+    print_info "  Linux: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
+# Usa o comando correto (docker compose ou docker-compose)
+if docker compose version &> /dev/null; then
+    COMPOSE_CMD="docker compose"
+    COMPOSE_VERSION=$(docker compose version --short)
 else
-    POETRY_VERSION=$(poetry --version 2>&1 | cut -d' ' -f3)
-    print_success "Poetry $POETRY_VERSION detectado ✓"
+    COMPOSE_CMD="docker-compose"
+    COMPOSE_VERSION=$(docker-compose --version | cut -d' ' -f3 | cut -d',' -f1)
 fi
 
-# ==========================================
-# CONFIGURAÇÃO DO POETRY
-# ==========================================
-
-print_info "Configurando Poetry para criar venv local..."
-
-# Configura Poetry para criar .venv na pasta do projeto
-poetry config virtualenvs.in-project true
-poetry config virtualenvs.prefer-active-python true
-
-print_success "Configuração do Poetry atualizada ✓"
-
-# ==========================================
-# INSTALAÇÃO DE DEPENDÊNCIAS
-# ==========================================
-
-print_header "INSTALAÇÃO DE DEPENDÊNCIAS"
-
-print_info "Instalando dependências Python via Poetry..."
-print_info "Isso pode levar alguns minutos na primeira execução..."
-
-if poetry install; then
-    print_success "Dependências instaladas com sucesso!"
-else
-    print_error "Falha na instalação das dependências."
-    print_info "Tente executar manualmente: poetry install"
-    exit 1
-fi
+print_success "$COMPOSE_CMD $COMPOSE_VERSION detectado ✓"
 
 # ==========================================
 # CONFIGURAÇÃO DO ARQUIVO .ENV
@@ -156,10 +118,10 @@ if [ ! -f ".env" ]; then
     if [ -f ".env.example" ]; then
         cp ".env.example" ".env"
         print_success "Arquivo .env criado!"
-        print_warning "⚠️  IMPORTANTE: Configure suas chaves API no arquivo .env"
+        print_warning "⚠️  IMPORTANTE: Configure sua OPENAI_API_KEY no arquivo .env"
         print_info "   - Edite o arquivo .env"
         print_info "   - Adicione sua OPENAI_API_KEY"
-        print_info "   - Ajuste URLs se necessário"
+        print_info "   - URLs do Qdrant e Redis já estão configuradas para Docker"
     else
         print_error "Arquivo .env.example não encontrado!"
         exit 1
@@ -169,27 +131,39 @@ else
 fi
 
 # ==========================================
+# TESTE DE CONECTIVIDADE DOCKER
+# ==========================================
+
+print_header "TESTE DO AMBIENTE DOCKER"
+
+print_info "Testando se as imagens podem ser baixadas..."
+
+# Tenta baixar uma imagem pequena para testar conectividade
+if docker pull hello-world:latest &> /dev/null; then
+    print_success "Conectividade com Docker Hub ✓"
+    docker rmi hello-world:latest &> /dev/null
+else
+    print_warning "Possível problema de conectividade ou proxy corporativo"
+    print_info "Se estiver atrás de proxy, configure Docker:"
+    print_info "  https://docs.docker.com/config/daemon/systemd/#httphttps-proxy"
+fi
+
+# ==========================================
 # VERIFICAÇÃO FINAL
 # ==========================================
 
 print_header "VERIFICAÇÃO FINAL"
 
-# Verifica se o ambiente virtual foi criado
-if [ -d ".venv" ]; then
-    print_success "Ambiente virtual criado em .venv/"
-else
-    print_warning "Ambiente virtual não encontrado. Poetry pode estar usando cache global."
+# Verifica espaço em disco (aviso se < 2GB)
+AVAILABLE_SPACE=$(df . | tail -1 | awk '{print $4}')
+if [ "$AVAILABLE_SPACE" -lt 2000000 ]; then
+    print_warning "Pouco espaço em disco disponível (< 2GB)"
+    print_info "O workshop precisa de pelo menos 2GB para imagens Docker"
 fi
 
-# Informações de ativação do ambiente
-print_info "Para ativar o ambiente virtual manualmente:"
-if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
-    print_info "   .venv\\Scripts\\activate"
-else
-    print_info "   source .venv/bin/activate"
-fi
-
-print_info "Ou use Poetry: poetry shell"
+print_success "✅ Docker e Docker Compose configurados"
+print_success "✅ Arquivo .env criado"
+print_success "✅ Ambiente pronto para inicialização"
 
 # ==========================================
 # RESUMO E PRÓXIMOS PASSOS
@@ -197,23 +171,23 @@ print_info "Ou use Poetry: poetry shell"
 
 print_header "BOOTSTRAP CONCLUÍDO COM SUCESSO!"
 
-print_success "✅ Python $PYTHON_VERSION configurado"
-print_success "✅ Poetry configurado e dependências instaladas"
-print_success "✅ Arquivo .env criado"
-print_success "✅ Ambiente pronto para desenvolvimento"
+print_success "✅ Docker $DOCKER_VERSION rodando"
+print_success "✅ $COMPOSE_CMD $COMPOSE_VERSION disponível"
+print_success "✅ Arquivo .env configurado"
+print_success "✅ Ambiente pronto para o workshop"
 
 echo ""
 print_info "🚀 PRÓXIMOS PASSOS:"
 echo ""
-print_info "1. Configure suas chaves API:"
+print_info "1. Configure sua chave API:"
 print_info "   📝 Edite o arquivo .env"
 print_info "   🔑 Adicione sua OPENAI_API_KEY"
 echo ""
-print_info "2. Inicie os serviços auxiliares:"
+print_info "2. Inicie o ambiente completo:"
 print_info "   🐳 make up (ou docker compose up -d)"
 echo ""
 print_info "3. Execute as verificações:"
-print_info "   🔍 make check"
+print_info "   🔍 make check (ou docker compose exec workshop-app python -m scripts.check_env)"
 echo ""
 print_info "4. Se tudo estiver ✅, continue para o próximo módulo!"
 
