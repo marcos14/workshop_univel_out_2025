@@ -7,7 +7,8 @@ from ..database import get_db
 from ..models import User, Conversation, Message, UserBookInteraction
 from ..dto.chat_dto import (
     MessageCreate, MessageResponse, ConversationCreate, 
-    ConversationResponse, ConversationWithMessages, ChatResponse
+    ConversationResponse, ConversationWithMessages, ChatResponse,
+    SimpleChatRequest, SimpleChatResponse
 )
 from ..services.openai_service import OpenAIService
 from ..services.qdrant_service import QdrantService
@@ -243,3 +244,35 @@ async def delete_conversation(
     db.commit()
     
     return {"message": "Conversa deletada com sucesso"}
+
+@router.post("/", response_model=SimpleChatResponse)
+async def simple_chat(
+    request: SimpleChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Chat simples sem conversa persistente"""
+    
+    try:
+        # Usar chat com contexto se search_books for True
+        if request.search_books:
+            response = await openai_service.chat_with_search(request.message, current_user.id)
+            # Extrair informações de contexto se disponível
+            context_books = getattr(response, 'context_books', []) if hasattr(response, 'context_books') else []
+        else:
+            response = await openai_service.chat(request.message)
+            context_books = []
+        
+        return SimpleChatResponse(
+            message=request.message,
+            response=str(response),
+            search_books=request.search_books,
+            context_books=context_books
+        )
+        
+    except Exception as e:
+        logger.error(f"Erro no chat simples: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro ao processar mensagem: {str(e)}"
+        )

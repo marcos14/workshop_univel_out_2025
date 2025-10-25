@@ -42,3 +42,13 @@ class ChatResponse(BaseModel):
     conversation_id: int
     message: MessageResponse
     context_books: List[str] = Field(default=[], description="Livros utilizados como contexto")
+
+class SimpleChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=2000)
+    search_books: bool = Field(default=False, description="Buscar contexto nos livros")
+
+class SimpleChatResponse(BaseModel):
+    message: str
+    response: str
+    search_books: bool
+    context_books: List[str] = Field(default=[], description="Livros utilizados como contexto")

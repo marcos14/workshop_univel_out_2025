@@ -13,6 +13,35 @@ class QdrantService:
         self.client = None
         self.collection_name = "library_books"
         self.qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+        self._initialized = False
+        
+    def _ensure_initialized(self):
+        """Garantir que o cliente está inicializado"""
+        if not self._initialized:
+            try:
+                self.client = QdrantClient(url=self.qdrant_url)
+                self._initialized = True
+                logger.info(f"Qdrant cliente inicializado: {self.qdrant_url}")
+                
+                # Verificar se a collection existe, se não, criar
+                try:
+                    collection_info = self.client.get_collection(self.collection_name)
+                    logger.info(f"Collection '{self.collection_name}' já existe")
+                except UnexpectedResponse:
+                    # Collection não existe, criar
+                    self.client.create_collection(
+                        collection_name=self.collection_name,
+                        vectors_config=VectorParams(
+                            size=1536,  # Dimensão dos embeddings OpenAI text-embedding-ada-002
+                            distance=Distance.COSINE
+                        )
+                    )
+                    logger.info(f"Collection '{self.collection_name}' criada com sucesso")
+                    
+            except Exception as e:
+                logger.error(f"Erro ao inicializar Qdrant: {e}")
+                self.client = None
+                self._initialized = False
         
     async def initialize(self):
         """Inicializar conexão com Qdrant e criar collection se necessário"""
@@ -41,6 +70,13 @@ class QdrantService:
     async def add_book_chunk(self, chunk_id: str, text: str, embedding: List[float], metadata: Dict[str, Any]) -> bool:
         """Adicionar chunk de livro ao Qdrant"""
         try:
+            # Garantir que está inicializado
+            self._ensure_initialized()
+            
+            if not self.client:
+                logger.error("Cliente Qdrant não inicializado")
+                return False
+                
             point = PointStruct(
                 id=chunk_id,
                 vector=embedding,
@@ -68,6 +104,13 @@ class QdrantService:
     async def search_similar_chunks(self, query_embedding: List[float], book_ids: Optional[List[int]] = None, limit: int = 5) -> List[Dict[str, Any]]:
         """Buscar chunks similares baseado no embedding da query"""
         try:
+            # Garantir que está inicializado
+            self._ensure_initialized()
+            
+            if not self.client:
+                logger.error("Cliente Qdrant não inicializado")
+                return []
+            
             # Criar filtro se book_ids foram especificados
             query_filter = None
             if book_ids:

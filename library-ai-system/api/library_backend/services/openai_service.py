@@ -45,10 +45,24 @@ class OpenAIService:
             books_mentioned = set()
             
             for chunk in context_chunks:
-                context_text += f"\n--- Trecho do livro '{chunk['book_title']}' (Página {chunk.get('page_number', 'N/A')}) ---\n"
-                context_text += chunk['text']
+                # Verificar se os dados necessários existem
+                book_title = chunk.get('book_title', 'Livro Desconhecido')
+                page_number = chunk.get('page_number', 'N/A')
+                text = chunk.get('text', '')
+                
+                # Pular chunks sem texto válido
+                if not text or text.strip() == '':
+                    continue
+                    
+                context_text += f"\n--- Trecho do livro '{book_title}' (Página {page_number}) ---\n"
+                context_text += str(text)  # Garantir que é string
                 context_text += "\n"
-                books_mentioned.add(chunk['book_title'])
+                books_mentioned.add(book_title)
+            
+            # Verificar se temos contexto válido
+            if not context_text.strip():
+                context_text = "Nenhum contexto relevante encontrado nos livros disponíveis."
+                books_mentioned.add("Nenhum livro específico")
             
             # Criar mensagem do sistema com contexto
             system_message = f"""Você é uma bibliotecária virtual especializada em ajudar usuários a encontrar informações em livros.
@@ -63,7 +77,7 @@ INSTRUÇÕES:
 4. Seja conversacional e útil, como uma bibliotecária experiente
 5. Quando citar trechos, mencione o livro e a página se disponível
 
-LIVROS CONSULTADOS: {', '.join(books_mentioned)}"""
+LIVROS CONSULTADOS: {', '.join(filter(None, books_mentioned))}"""
 
             # Preparar mensagens para a API
             api_messages = [{"role": "system", "content": system_message}]
@@ -81,6 +95,51 @@ LIVROS CONSULTADOS: {', '.join(books_mentioned)}"""
         except Exception as e:
             logger.error(f"Erro ao gerar resposta do chat: {e}")
             return "Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente."
+    
+    async def chat(self, message: str) -> str:
+        """Chat simples sem contexto"""
+        try:
+            response = self.client.chat.completions.create(
+                model=self.chat_model,
+                messages=[
+                    {"role": "system", "content": "Você é uma assistente virtual útil e amigável. Responda de forma concisa e clara."},
+                    {"role": "user", "content": message}
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"Erro no chat simples: {e}")
+            return "Desculpe, ocorreu um erro ao processar sua pergunta. Tente novamente."
+    
+    async def chat_with_search(self, message: str, user_id: int) -> str:
+        """Chat com busca em livros"""
+        try:
+            from .qdrant_service import QdrantService
+            qdrant_service = QdrantService()
+            
+            # Gerar embedding da mensagem
+            query_embedding = await self.generate_embedding(message)
+            if not query_embedding:
+                return "Desculpe, não consegui processar sua pergunta."
+            
+            # Buscar chunks relevantes
+            relevant_chunks = await qdrant_service.search_similar_chunks(
+                query_embedding=query_embedding,
+                book_ids=None,  # Buscar em todos os livros do usuário
+                limit=5
+            )
+            
+            # Usar chat com contexto
+            chat_messages = [{"role": "user", "content": message}]
+            return await self.chat_with_context(
+                messages=chat_messages,
+                context_chunks=relevant_chunks
+            )
+        except Exception as e:
+            logger.error(f"Erro no chat com busca: {e}")
+            return "Desculpe, ocorreu um erro ao buscar informações nos livros. Tente novamente."
     
     def count_tokens(self, text: str) -> int:
         """Contar tokens em um texto"""

@@ -27,11 +27,10 @@ async def lifespan(app: FastAPI):
     create_tables()
     logger.info("✅ Tabelas do banco de dados criadas/verificadas")
     
-    # TEMPORARIAMENTE DESABILITADO: Inicialização do Qdrant (causa travamento)
-    # qdrant_service = QdrantService()
-    # await qdrant_service.initialize()
-    # logger.info("✅ Qdrant inicializado")
-    logger.info("⚠️ Qdrant temporariamente desabilitado para evitar travamento")
+    # Inicializar Qdrant
+    qdrant_service = QdrantService()
+    await qdrant_service.initialize()
+    logger.info("✅ Qdrant inicializado")
     
     # Criar diretórios necessários
     os.makedirs(os.getenv("UPLOAD_DIR", "/app/uploads"), exist_ok=True)
