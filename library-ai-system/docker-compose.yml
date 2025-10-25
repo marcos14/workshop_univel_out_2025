@@ -1,0 +1,93 @@
+services:
+  # PostgreSQL com pgvector para dados estruturados e embeddings
+  library-pg:
+    image: pgvector/pgvector:pg16
+    container_name: library-pg
+    restart: always
+    environment:
+      - TZ=America/Sao_Paulo
+      - POSTGRES_PASSWORD=lib_pass_univel
+      - PGUSER=postgres
+      - PGPORT=5432
+      - POSTGRES_DB=library_db
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5437:5432"
+    networks:
+      - library-network
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # Qdrant para armazenamento de embeddings vetoriais
+  library-qdrant:
+    image: qdrant/qdrant:latest
+    container_name: library-qdrant
+    restart: always
+    environment:
+      - TZ=America/Sao_Paulo
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    networks:
+      - library-network
+
+  # API FastAPI principal do sistema de biblioteca
+  library-api:
+    build: ./api/
+    container_name: library-api
+    command: uvicorn library_backend.main:app --host 0.0.0.0 --reload
+    environment:
+      DATABASE_URI: postgresql+psycopg2://postgres:lib_pass_univel@library-pg:5432/library_db
+      QDRANT_URL: http://library-qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SECRET_KEY: library_secret_key_2024_advanced
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: 1440
+      LOG_LEVEL: "INFO"
+      LOG_DIR: "/app/logs"
+      TZ: "America/Sao_Paulo"
+      UPLOAD_DIR: "/app/uploads"
+    volumes:
+      - ./api:/app
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    ports:
+      - "8040:8000"
+    networks:
+      - library-network
+    depends_on:
+      library-pg:
+        condition: service_healthy
+      library-qdrant:
+        condition: service_started
+    restart: always
+
+  # MCP Server para análise de dados da biblioteca
+  library-mcp-server:
+    build: ./mcp-server/
+    container_name: library-mcp-server
+    restart: always
+    environment:
+      - TZ=America/Sao_Paulo
+      - DATABASE_URI=postgresql+psycopg2://postgres:lib_pass_2024@library-pg:5432/library_db
+      - QDRANT_URL=http://library-qdrant:6333
+    volumes:
+      - ./mcp-server:/app
+    networks:
+      - library-network
+    depends_on:
+      library-pg:
+        condition: service_healthy
+      library-qdrant:
+        condition: service_started
+
+networks: 
+  library-network:
+    driver: bridge

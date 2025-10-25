@@ -1,0 +1,5 @@
+library-ai-system/.env
+data/
+logs/
+temp/
+uploads/

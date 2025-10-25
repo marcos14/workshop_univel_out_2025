@@ -1,0 +1,1 @@
+# Core - Lógica de negócios
