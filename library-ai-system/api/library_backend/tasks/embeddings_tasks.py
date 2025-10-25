@@ -1,6 +1,6 @@
 from celery import current_task
 from library_backend.celery_app import celery_app
-import openai
+from openai import OpenAI
 import os
 import time
 from typing import List, Dict
@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Configurações
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
+QDRANT_HOST = os.getenv("QDRANT_HOST", "library-qdrant")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
-openai.api_key = OPENAI_API_KEY
+# Inicializar cliente OpenAI
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 @celery_app.task(bind=True)
 def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collection_name: str = "library_books"):
@@ -28,10 +29,15 @@ def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collectio
     try:
         logger.info(f"Iniciando processamento de embeddings para livro {book_id}")
         
+        # Verificar se temos OpenAI API Key
+        if not OPENAI_API_KEY or not openai_client:
+            logger.warning("OPENAI_API_KEY não configurada, executando em modo simulação")
+            return process_pdf_embeddings_simulation(self, book_id, text_chunks, collection_name)
+        
         # Atualizar status da task
         self.update_state(
             state='PROGRESS',
-            meta={'current': 0, 'total': len(text_chunks), 'status': 'Processando chunks...'}
+            meta={'current': 0, 'total': len(text_chunks), 'status': 'Conectando ao Qdrant...'}
         )
         
         # Conectar ao Qdrant
@@ -40,6 +46,7 @@ def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collectio
         # Verificar se a collection existe, senão criar
         try:
             client.get_collection(collection_name)
+            logger.info(f"Collection {collection_name} já existe")
         except Exception:
             logger.info(f"Criando collection {collection_name}")
             client.create_collection(
@@ -58,12 +65,12 @@ def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collectio
             # Gerar embeddings para o lote
             for chunk_idx, chunk in enumerate(batch):
                 try:
-                    response = openai.Embedding.create(
+                    response = openai_client.embeddings.create(
                         input=chunk,
                         model="text-embedding-ada-002"
                     )
                     
-                    embedding = response['data'][0]['embedding']
+                    embedding = response.data[0].embedding
                     
                     # Criar point para Qdrant
                     point = PointStruct(
@@ -118,7 +125,8 @@ def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collectio
             'status': 'completed',
             'book_id': book_id,
             'chunks_processed': total_processed,
-            'collection': collection_name
+            'collection': collection_name,
+            'mode': 'real'
         }
         
     except Exception as e:
@@ -129,6 +137,40 @@ def process_pdf_embeddings(self, book_id: int, text_chunks: List[str], collectio
         )
         raise
 
+def process_pdf_embeddings_simulation(task_self, book_id: int, text_chunks: List[str], collection_name: str):
+    """
+    Simulação do processamento quando não temos API keys configuradas
+    """
+    logger.info(f"Executando SIMULAÇÃO de embeddings para livro {book_id}")
+    
+    total_chunks = len(text_chunks)
+    
+    for i in range(total_chunks):
+        # Simular processamento
+        time.sleep(1)  # 1 segundo por chunk
+        
+        # Atualizar progress
+        task_self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': i + 1,
+                'total': total_chunks,
+                'status': f'Simulando chunk {i + 1}/{total_chunks}',
+                'mode': 'simulation'
+            }
+        )
+        
+        logger.info(f"SIMULAÇÃO: Chunk {i + 1}/{total_chunks} processado")
+    
+    return {
+        'status': 'completed',
+        'book_id': book_id,
+        'chunks_processed': total_chunks,
+        'collection': collection_name,
+        'mode': 'simulation',
+        'message': 'Processamento simulado concluído! Configure OPENAI_API_KEY para processamento real.'
+    }
+
 @celery_app.task(bind=True)
 def search_similar_documents(self, query: str, collection_name: str = "library_books", limit: int = 5):
     """
@@ -137,13 +179,24 @@ def search_similar_documents(self, query: str, collection_name: str = "library_b
     try:
         logger.info(f"Buscando documentos similares para: {query}")
         
+        # Verificar se temos OpenAI configurado
+        if not OPENAI_API_KEY or not openai_client:
+            logger.warning("OPENAI_API_KEY não configurada, retornando resultados simulados")
+            return {
+                'status': 'completed',
+                'query': query,
+                'results': [],
+                'mode': 'simulation',
+                'message': 'Configure OPENAI_API_KEY para busca real'
+            }
+        
         # Gerar embedding da query
-        response = openai.Embedding.create(
+        response = openai_client.embeddings.create(
             input=query,
             model="text-embedding-ada-002"
         )
         
-        query_embedding = response['data'][0]['embedding']
+        query_embedding = response.data[0].embedding
         
         # Conectar ao Qdrant
         client = QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
