@@ -12,7 +12,7 @@ from ..models import Book, Author, BookAuthor, BookChunk, User
 from ..dto.book_dto import BookCreate, BookResponse, BookList, BookUploadResponse
 from ..services.pdf_service import PDFService
 from ..services.openai_service import OpenAIService
-from ..services.qdrant_service import QdrantService
+# from ..services.qdrant_service import QdrantService  # Temporariamente desabilitado
 from ..core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ router = APIRouter()
 # Instanciar serviços
 pdf_service = PDFService()
 openai_service = OpenAIService()
-qdrant_service = QdrantService()
+# qdrant_service = QdrantService()  # Temporariamente desabilitado
 
 @router.post("/upload", response_model=BookUploadResponse)
 async def upload_book(
@@ -106,14 +106,18 @@ async def upload_book(
         
         db.commit()
         
-        # Processar embeddings em background
-        asyncio.create_task(process_book_embeddings(book.id, extraction_result))
+        # TODO: Processar embeddings em background (temporariamente desabilitado para evitar travamento)
+        # asyncio.create_task(process_book_embeddings(book.id, extraction_result))
+        
+        # Marcar como processado para simplificar
+        book.processed = True
+        db.commit()
         
         return BookUploadResponse(
             success=True,
-            message="Livro enviado com sucesso! O processamento de embeddings está em andamento.",
+            message="Livro enviado com sucesso! Processamento concluído.",
             book_id=book.id,
-            processing_status="processing"
+            processing_status="completed"
         )
         
     except HTTPException:
@@ -125,68 +129,56 @@ async def upload_book(
             detail="Erro interno do servidor"
         )
 
-async def process_book_embeddings(book_id: int, extraction_result: dict):
-    """Processar embeddings do livro em background"""
-    try:
-        db = next(get_db())
-        book = db.query(Book).filter(Book.id == book_id).first()
-        
-        if not book:
-            logger.error(f"Livro {book_id} não encontrado para processamento")
-            return
-        
-        # Dividir texto em chunks
-        full_text = extraction_result["text"]
-        chunks = openai_service.split_text_by_tokens(full_text, max_tokens=800, overlap=100)
-        
-        # Gerar embeddings para cada chunk
-        embeddings = await openai_service.generate_embeddings_batch(chunks)
-        
-        # Salvar chunks e embeddings
-        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            if embedding:  # Verificar se embedding foi gerado com sucesso
-                # Gerar UUID para o ponto no Qdrant
-                qdrant_point_id = str(uuid.uuid4())
-                
-                # Salvar no PostgreSQL
-                book_chunk = BookChunk(
-                    book_id=book.id,
-                    chunk_text=chunk_text,
-                    chunk_index=idx,
-                    qdrant_point_id=qdrant_point_id
-                )
-                db.add(book_chunk)
-                
-                # Salvar no Qdrant
-                await qdrant_service.add_book_chunk(
-                    chunk_id=qdrant_point_id,
-                    text=chunk_text,
-                    embedding=embedding,
-                    metadata={
-                        "book_id": book.id,
-                        "book_title": book.title,
-                        "chunk_index": idx,
-                        "page_number": None  # Poderia ser calculado baseado na posição
-                    }
-                )
-        
-        # Marcar livro como processado
-        book.processed = True
-        db.commit()
-        
-        logger.info(f"Processamento de embeddings concluído para livro {book_id}")
-        
-    except Exception as e:
-        logger.error(f"Erro no processamento de embeddings para livro {book_id}: {e}")
-        # Marcar livro com erro de processamento
-        try:
-            db = next(get_db())
-            book = db.query(Book).filter(Book.id == book_id).first()
-            if book:
-                book.processed = False  # Manter como não processado para retry
-                db.commit()
-        except:
-            pass
+# async def process_book_embeddings(book_id: int, extraction_result: dict):
+#     """Processar embeddings do livro em background - TEMPORARIAMENTE DESABILITADO"""
+#     pass
+    # try:
+    #     db = next(get_db())
+    #     book = db.query(Book).filter(Book.id == book_id).first()
+    #     
+    #     if not book:
+    #         logger.error(f"Livro {book_id} não encontrado para processamento")
+    #         return
+    #     
+    #     # Dividir texto em chunks
+    #     full_text = extraction_result["text"]
+    #     chunks = openai_service.split_text_by_tokens(full_text, max_tokens=800, overlap=100)
+    #     
+    #     # Gerar embeddings para cada chunk
+    #     embeddings = await openai_service.generate_embeddings_batch(chunks)
+    #     
+    #     # Salvar chunks e embeddings
+    #     for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+    #         if embedding:  # Verificar se embedding foi gerado com sucesso
+    #             # Gerar UUID para o ponto no Qdrant
+    #             qdrant_point_id = str(uuid.uuid4())
+    #             
+    #             # Salvar no PostgreSQL
+    #             book_chunk = BookChunk(
+    #                 book_id=book.id,
+    #                 chunk_text=chunk_text,
+    #                 chunk_index=idx,
+    #                 qdrant_point_id=qdrant_point_id
+    #             )
+    #             db.add(book_chunk)
+    #     
+    #     # Marcar livro como processado
+    #     book.processed = True
+    #     db.commit()
+    #     
+    #     logger.info(f"Processamento de embeddings concluído para livro {book_id}")
+    #     
+    # except Exception as e:
+    #     logger.error(f"Erro no processamento de embeddings para livro {book_id}: {e}")
+    #     # Marcar livro com erro de processamento
+    #     try:
+    #         db = next(get_db())
+    #         book = db.query(Book).filter(Book.id == book_id).first()
+    #         if book:
+    #             book.processed = False  # Manter como não processado para retry
+    #             db.commit()
+    #     except:
+    #         pass
 
 @router.get("/", response_model=BookList)
 async def list_books(
@@ -271,8 +263,8 @@ async def delete_book(
         )
     
     try:
-        # Deletar chunks do Qdrant
-        await qdrant_service.delete_book_chunks(book_id)
+        # TODO: Deletar chunks do Qdrant (temporariamente desabilitado)
+        # await qdrant_service.delete_book_chunks(book_id)
         
         # Deletar arquivo físico
         if book.file_path and os.path.exists(book.file_path):

@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from .database import get_db, create_tables
 from .routes import books, chat, auth, users
-from .services.qdrant_service import QdrantService
+# from .services.qdrant_service import QdrantService  # Temporariamente desabilitado
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -27,10 +27,10 @@ async def lifespan(app: FastAPI):
     create_tables()
     logger.info("✅ Tabelas do banco de dados criadas/verificadas")
     
-    # Inicializar conexão com Qdrant
-    qdrant_service = QdrantService()
-    await qdrant_service.initialize()
-    logger.info("✅ Qdrant inicializado")
+    # Inicializar conexão com Qdrant (temporariamente desabilitado)
+    # qdrant_service = QdrantService()
+    # await qdrant_service.initialize()
+    # logger.info("✅ Qdrant inicializado")
     
     # Criar diretórios necessários
     os.makedirs(os.getenv("UPLOAD_DIR", "/app/uploads"), exist_ok=True)
