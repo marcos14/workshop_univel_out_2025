@@ -112,3 +112,49 @@ class PDFService:
             return True
         except Exception:
             return False
+    
+    def create_text_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+        """Criar chunks de texto para processamento de embeddings"""
+        if not text or not text.strip():
+            return []
+        
+        # Limpar o texto
+        text = text.strip()
+        
+        # Se o texto é menor que o chunk_size, retornar como um único chunk
+        if len(text) <= chunk_size:
+            return [text]
+        
+        chunks = []
+        start = 0
+        
+        while start < len(text):
+            # Calcular o fim do chunk
+            end = start + chunk_size
+            
+            # Se não é o último chunk, tentar quebrar em uma palavra
+            if end < len(text):
+                # Procurar por quebra de linha ou espaço para quebrar o texto
+                for i in range(end, max(start + chunk_size - 200, start), -1):
+                    if text[i] in ['\n', '.', '!', '?']:
+                        end = i + 1
+                        break
+                    elif text[i] == ' ':
+                        end = i
+                        break
+            
+            # Extrair o chunk
+            chunk = text[start:end].strip()
+            
+            if chunk:  # Só adicionar chunks não vazios
+                chunks.append(chunk)
+            
+            # Calcular próximo início com overlap
+            start = max(start + 1, end - overlap)
+            
+            # Evitar loop infinito
+            if start >= len(text):
+                break
+        
+        logger.info(f"Texto dividido em {len(chunks)} chunks")
+        return chunks

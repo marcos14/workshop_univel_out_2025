@@ -43,3 +43,4 @@ class BookUploadResponse(BaseModel):
     message: str
     book_id: Optional[int] = None
     processing_status: str
+    task_id: Optional[str] = None

@@ -8,8 +8,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from .database import get_db, create_tables
-from .routes import books, chat, auth, users
-# from .services.qdrant_service import QdrantService  # Temporariamente desabilitado
+from .routes import books, chat, auth, users, tasks
+from .services.qdrant_service import QdrantService
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -27,10 +27,11 @@ async def lifespan(app: FastAPI):
     create_tables()
     logger.info("✅ Tabelas do banco de dados criadas/verificadas")
     
-    # Inicializar conexão com Qdrant (temporariamente desabilitado)
+    # TEMPORARIAMENTE DESABILITADO: Inicialização do Qdrant (causa travamento)
     # qdrant_service = QdrantService()
     # await qdrant_service.initialize()
     # logger.info("✅ Qdrant inicializado")
+    logger.info("⚠️ Qdrant temporariamente desabilitado para evitar travamento")
     
     # Criar diretórios necessários
     os.makedirs(os.getenv("UPLOAD_DIR", "/app/uploads"), exist_ok=True)
@@ -71,6 +72,7 @@ app.include_router(auth.router, prefix="/auth", tags=["Autenticação"])
 app.include_router(users.router, prefix="/users", tags=["Usuários"])
 app.include_router(books.router, prefix="/books", tags=["Livros"])
 app.include_router(chat.router, prefix="/chat", tags=["Chat com IA"])
+app.include_router(tasks.router, prefix="/tasks", tags=["Tasks Assíncronas"])
 
 # Rota de boas-vindas
 @app.get("/")

@@ -52,6 +52,7 @@ class Book(Base):
     file_path = Column(String(500))
     file_size = Column(BigInteger)
     processed = Column(Boolean, default=False)
+    task_id = Column(String(255))  # ID da task do Celery para tracking
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

@@ -17,3 +17,5 @@ aiofiles
 python-dateutil
 pandas
 numpy
+celery
+redis
